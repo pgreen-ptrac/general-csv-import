@@ -39,22 +39,25 @@ def is_str_positive_integer(value):
     return True
 
 def is_valid_ipv4_address(address): 
-    pattern = r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$" 
-    if re.match(pattern, address): 
-        return True 
-    else:
-        return False 
+    pattern = re.compile(r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$")
+    return pattern.match(address) is not None
 
 def is_valid_cve(cve):
     cve_pattern = re.compile(r'CVE-[0-9]{4}-[0-9]')
     return cve_pattern.match(cve) is not None
 
 def is_valid_cwe(cwe):
+    # CWE-12345
     cwe_pattern = re.compile(r'CWE-[0-9]')
     pattern_match = cwe_pattern.match(cwe) is not None
+    # 12345
     cwe_num = re.compile(r'[0-9]')
     num_match = cwe_num.match(cwe) is not None
     return pattern_match or num_match
+
+def is_valid_cvss3_1_vector(cvss_vector): 
+    pattern = re.compile(r"^((AV:[NALP]|AC:[LH]|PR:[NLH]|UI:[NR]|S:[UC]|[CIA]:[NLH]|E:[XUPFH]|RL:[XOTWU]|RC:[XURC]|[CIA]R:[XLMH]|MAV:[XNALP]|MAC:[XLH]|MPR:[XNLH]|MUI:[XNR]|MS:[XUC]|M[CIA]:[XNLH])/)*(AV:[NALP]|AC:[LH]|PR:[NLH]|UI:[NR]|S:[UC]|[CIA]:[NLH]|E:[XUPFH]|RL:[XOTWU]|RC:[XURC]|[CIA]R:[XLMH]|MAV:[XNALP]|MAC:[XLH]|MPR:[XNLH]|MUI:[XNR]|MS:[XUC]|M[CIA]:[XNLH])$") 
+    return pattern.match(cvss_vector) is not None
 
 def sanitize_name_for_file(name):
     # certain characters are not allowed in file names

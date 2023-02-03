@@ -244,6 +244,7 @@ class Parser():
             'input_blanks': True,
             'path': ['fields']
         },
+        # cvss scores
         'finding_cvss3_1_overall': {
             'id': 'finding_cvss3_1_overall',
             'object_type': 'FINDING',
@@ -256,9 +257,81 @@ class Parser():
             'id': 'finding_cvss3_1_vector',
             'object_type': 'FINDING',
             'data_type' : 'DETAIL',
-            'validation_type': None,
+            'validation_type': 'CVSS_VECTOR', # validate
             'input_blanks': False,
             'path': ['risk_score', 'CVSS3_1', 'vector']
+        },
+        'finding_cvss3_vector': {
+            'id': 'finding_cvss3_vector',
+            'object_type': 'FINDING',
+            'data_type' : 'DETAIL',
+            'validation_type': None,
+            'input_blanks': False,
+            'path': ['fields', 'scores', 'cvss3', 'calculation']
+        },
+        'finding_cvss3_value': {
+            'id': 'finding_cvss3_value',
+            'object_type': 'FINDING',
+            'data_type' : 'DETAIL',
+            'validation_type': None,
+            'input_blanks': False,
+            'path': ['fields', 'scores', 'cvss3', 'value']
+        },
+        'finding_cvss3_label': {
+            'id': 'finding_cvss3_label',
+            'object_type': 'FINDING',
+            'data_type' : 'DETAIL',
+            'validation_type': None,
+            'input_blanks': False,
+            'path': ['fields', 'scores', 'cvss3', 'label']
+        },
+        'finding_cvss2_vector': {
+            'id': 'finding_cvss2_vector',
+            'object_type': 'FINDING',
+            'data_type' : 'DETAIL',
+            'validation_type': None,
+            'input_blanks': False,
+            'path': ['fields', 'scores', 'cvss', 'calculation']
+        },
+        'finding_cvss2_value': {
+            'id': 'finding_cvss2_value',
+            'object_type': 'FINDING',
+            'data_type' : 'DETAIL',
+            'validation_type': None,
+            'input_blanks': False,
+            'path': ['fields', 'scores', 'cvss', 'value']
+        },
+        'finding_cvss2_label': {
+            'id': 'finding_cvss2_label',
+            'object_type': 'FINDING',
+            'data_type' : 'DETAIL',
+            'validation_type': None,
+            'input_blanks': False,
+            'path': ['fields', 'scores', 'cvss', 'label']
+        },
+        'finding_cvss_general_vector': {
+            'id': 'finding_cvss_general_vector',
+            'object_type': 'FINDING',
+            'data_type' : 'DETAIL',
+            'validation_type': None,
+            'input_blanks': False,
+            'path': ['fields', 'scores', 'general', 'calculation']
+        },
+        'finding_cvss_general_value': {
+            'id': 'finding_cvss_general_value',
+            'object_type': 'FINDING',
+            'data_type' : 'DETAIL',
+            'validation_type': None,
+            'input_blanks': False,
+            'path': ['fields', 'scores', 'general', 'value']
+        },
+        'finding_cvss_general_label': {
+            'id': 'finding_cvss_general_label',
+            'object_type': 'FINDING',
+            'data_type' : 'DETAIL',
+            'validation_type': None,
+            'input_blanks': False,
+            'path': ['fields', 'scores', 'general', 'label']
         },
         'finding_cve': {
             'id': 'finding_cve_name',
@@ -601,7 +674,28 @@ class Parser():
         'description': "No description",
         'recommendations': "",
         'references': "",
-        'fields': {},
+        'fields': {
+            'scores': {
+                "cvss3": {
+                "type": "cvss3",
+                "calculation": "",
+                "value": "",
+                "label": ""
+                },
+                "cvss": {
+                    "type": "cvss",
+                    "calculation": "",
+                    "value": "",
+                    "label": ""
+                },
+                "general": {
+                    "type": "general",
+                    "calculation": "",
+                    "value": "",
+                    "label": ""
+                }
+            }
+        },
         'risk_score': {
             'CVSS3_1': {
                 'overall': 0,
@@ -1195,6 +1289,13 @@ class Parser():
                 log.warning(f'Header "{header}" value "{value}" is not a valid asset type. Must be in the list ["Pass", "pass", "Yes", "yes", "y"] or ["Fail", "fail", "No", "no", "n"] Skipping...')
                 return
 
+        if mapping['validation_type'] == "CVSS_VECTOR":
+            if value.startswith('CVSS:3.1/'):
+                value = value[9:]
+            if not utils.is_valid_cvss3_1_vector(value):
+                log.warning(f'Header "{header}" value "{value}" is not a valid CVSSSv3.1 vector. Must be of the pattern \'AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:H/A:L\' or \'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:H/A:L\' Skipping...')
+                return
+
         if mapping['validation_type'] == "POS_INT_AS_STR":
             if not utils.is_str_positive_integer(value):
                 log.warning(f'Header "{header}" value "{value}" is not a valid number. Must be a positive integer. Skipping...')
@@ -1562,6 +1663,10 @@ class Parser():
                         log.info(f'Updating finding <{finding["title"]}> with asset information')
 
                         pt_finding = api.finding.get(auth.base_url, auth.get_auth_headers(), client_id, report_id, finding_id)
+                        # when creating a finding certain fields are not validated (cwes, cvss3.1 vector, etc.). IF these fields have invalid data that
+                        # would prevent an autosave, the finding will be created successfully, but then crash the api when the finding is called the first time
+                        # - since the api crashes the best this script can do is inform the user and exit
+                        # - instead ideally make sure findings are created with valid data
 
                         num_assets_to_update = 0
                         for asset_sid in finding['assets']:
