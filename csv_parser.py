@@ -1136,6 +1136,8 @@ class Parser():
         if len(path) == 1:
             if path[0] == "INDEX":
                 obj.append(value)
+            elif path[0] == "references":
+                obj['references'] = f'{obj["references"]}\n\n{value}'
             else:    
                 obj[path[0]] = value
             return
