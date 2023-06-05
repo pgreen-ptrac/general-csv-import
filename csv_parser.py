@@ -8,8 +8,9 @@ import re
 
 import utils.log_handler as logger
 log = logger.log
-from api import *
+import api
 
+from utils.auth_handler import Auth
 import utils.general_utils as utils
 
 
@@ -810,17 +811,16 @@ class Parser():
         """
         
         """
-        self.csv_headers_mapping = None
-        self.csv_data = None
-        self.logging_data = None
-        self.parser_progess = None
+        self.csv_headers_mapping: dict = None
+        self.csv_data: list = None
+        self.parser_progess: int = None
 
         self.severities = ["Critical", "High", "Medium", "Low", "Informational"]
 
-        self.parser_time_seconds = time.time()
-        self.parser_time_milli_seconds = int(self.parser_time_seconds*1000)
-        self.parser_date = time.strftime("%m/%d/%Y", time.localtime(self.parser_time_seconds))
-        self.parser_time = time.strftime("%Y_%m_%d_%H_%M_%S", time.localtime(self.parser_time_seconds))
+        self.parser_time_seconds: float = time.time()
+        self.parser_time_milli_seconds: int = int(self.parser_time_seconds*1000)
+        self.parser_date: str = time.strftime("%m/%d/%Y", time.localtime(self.parser_time_seconds))
+        self.parser_time: str = time.strftime("%Y_%m_%d_%H_%M_%S", time.localtime(self.parser_time_seconds))
 
         self.client_template['name'] = f'Custom CSV Import {self.parser_date}'
         self.report_template['name'] = f'Custom CSV Import Report {self.parser_date}'
@@ -839,6 +839,7 @@ class Parser():
         """
         return list(self.csv_headers_mapping.keys())
 
+    # TODO - this function is not used, consider removing
     def get_headers_by_data_type(self, data_type):
         type_mappings = list(map(lambda x: x['id'], list((filter(lambda x: (x['data_type'] == data_type), self.data_mapping.values()))) ))
         log.debug(type(type_mappings))
@@ -861,6 +862,7 @@ class Parser():
 
 
     #----------logging functions----------
+    # TODO CSV logging is no longer used, consider reimplementing or removing
     def create_log_file(self):
         """
         Creates a CSv with unique file name and populates it with the data that will be parsed
@@ -889,7 +891,8 @@ class Parser():
             log.warning(f'Error setting up csv log file: {e}')
 
 
-    def add_log(self, log, e=None):
+    # TODO CSV logging is no longer used, consider reimplementing or removing
+    def add_log(self, log_message, e=None):
         """
         While the script is parsing and adding findings it can run into 2 conditions:
         - A finding did not have the full expected data, but was added with data given (should verify the created finding is as expected)
@@ -905,8 +908,8 @@ class Parser():
                 for row in reader:
                     temp_csv_data.append(row)
 
-                log['num'] += 1
-                new_log = f'{log["type"]}:  {log["name"]}'
+                log_message['num'] += 1
+                new_log = f'{log_message["type"]}:  {log_message["name"]}'
                 if e != None:
                     new_log = f'{new_log}\n{e}'
                 temp_csv_data[i+1][len(self.data_mapping)] = f'{temp_csv_data[i+1][len(self.data_mapping)]}\n{new_log}'
@@ -920,7 +923,9 @@ class Parser():
 
     
     def display_parser_results(self):
-        log.success(f'CSV parsing completed!') # Successfully imported {self.log_messages["SUCCESS"]["num"]}/{len(self.csv_data)} findings.\n')
+        log.success(f'CSV parsing completed!')
+        # TODO unused CSV logging results
+        # Successfully imported {self.log_messages["SUCCESS"]["num"]}/{len(self.csv_data)} findings.\n')
         
         # for log in self.log_messages.values():
         #     if log['num'] > 0:
@@ -1247,15 +1252,19 @@ class Parser():
         path = mapping['path']
 
         if mapping['validation_type'] == "DATE_ZULU":
-            raw_date = utils.try_parsing_date(value, header)
-            if raw_date == None:
+            try:
+                raw_date = utils.try_parsing_date(value)
+            except ValueError:
+                log.exception(f"Non-valid date format for '{header}': '{value}'. Ignoring...")
                 return
             self.set_value(obj, path, time.strftime("%Y-%m-%dT08:00:00.000000Z", raw_date))
             return
 
         if mapping['validation_type'] == "DATE_EPOCH":
-            raw_date = utils.try_parsing_date(value, header)
-            if raw_date == None:
+            try:
+                raw_date = utils.try_parsing_date(value)
+            except ValueError:
+                log.exception(f"Non-valid date format for '{header}': '{value}'. Ignoring...")
                 return
             self.set_value(obj, path, int(time.mktime(raw_date)*1000))
             return
@@ -1389,7 +1398,7 @@ class Parser():
         cwes = value.split(",")
         for cwe in cwes:
             cwe_clean = cwe.strip()
-            if not utils.is_valid_cwe(cwe_clean):
+            if not (utils.is_valid_cwe(cwe_clean) or utils.is_valid_cwe(cwe_clean, has_prefix=False)):
                 log.warning(f'Header "{header}" value "{cwe_clean}" is not a list of valid CWE numbers. Expects "1234" or "CWE-1234" Skipping...')
                 return
 
@@ -1548,9 +1557,10 @@ class Parser():
         - Verfiy row contains finding
         - Call to process finding
         """
+        # TODO CSV logging is no longer used, consider reimplementing or removing
         # self.create_log_file()
 
-        # get index of 'name' obj in self.data_mapping - this will be the index to point us to the name column in the csv
+        # get index of 'name' obj in self.data_mapping - this will be the index to point us to the finding name column in the csv
         try:
             csv_finding_title_index = list(self.csv_headers_mapping.values()).index('finding_title')
         except ValueError:
@@ -1583,7 +1593,7 @@ class Parser():
         self.handle_finding_dup_names()
 
 
-    def import_data(self, auth):
+    def import_data(self, auth: Auth):
         """
         Calls Plextrac's API to creates new clients, reports and add findings and assets
         """
@@ -1597,12 +1607,12 @@ class Parser():
             payload.pop("sid")
             log.info(f'Creating client <{payload["name"]}>')
             
-            response = api.client.create(auth.base_url, auth.get_auth_headers(), payload)
-            if response.get("status") != "success":
+            response = api._v1.clients.create_client(auth.base_url, auth.get_auth_headers(), payload)
+            if response.json.get("status") != "success":
                 log.warning(f'Could not create client. Skipping all reports and findings under this client...')
                 continue
             log.success(f'Successfully created client!')
-            client_id = response.get("client_id")
+            client_id = response.json.get("client_id")
 
             # client assets
             for asset_sid in client['assets']:
@@ -1619,13 +1629,13 @@ class Parser():
                 payload.pop("dup_num")
                 payload.pop("is_multi")
                 log.info(f'Creating asset <{payload["asset"]}>')
-                response = api.asset.create(auth.base_url, auth.get_auth_headers(), payload, client_id)
-                if response.get("message") != "success":
+                response = api._v1.assets.create_asset(auth.base_url, auth.get_auth_headers(), client_id, payload)
+                if response.json.get("message") != "success":
                     asset['asset_id'] = None
                     log.warning(f'Could not create asset. Skipping...')
                     continue
                 log.success(f'Successfully created asset!')
-                asset['asset_id'] = response.get("id")
+                asset['asset_id'] = response.json.get("id")
 
             # reports
             for report_sid in client['reports']:
@@ -1634,12 +1644,12 @@ class Parser():
                 payload.pop("sid")
                 payload.pop("client_sid")
                 log.info(f'Creating report <{payload["name"]}>')
-                response = api.report.create(auth.base_url, auth.get_auth_headers(), payload, client_id)
-                if response.get("message") != "success":
+                response = api._v1.reports.create_report(auth.base_url, auth.get_auth_headers(), client_id, payload)
+                if response.json.get("message") != "success":
                     log.warning(f'Could not create report. Skipping all findings under this report...')
                     continue
                 log.success(f'Successfully created report!')
-                report_id = response.get("report_id")
+                report_id = response.json.get("report_id")
 
                 # findings
                 for finding_sid in self.reports[report_sid]['findings']:
@@ -1651,18 +1661,19 @@ class Parser():
                     payload.pop("report_sid")
                     payload.pop("affected_asset_sid")
                     log.info(f'Creating finding <{payload["title"]}>')
-                    response = api.finding.create(auth.base_url, auth.get_auth_headers(), payload, client_id, report_id)
-                    if response.get("message") != "success":
+                    response = api._v1.findings.create_finding(auth.base_url, auth.get_auth_headers(), client_id, report_id, payload)
+                    if response.json.get("message") != "success":
                         log.warning(f'Could not create finding. Skipping...')
                         continue
                     log.success(f'Successfully created finding!')
-                    finding_id = response.get("flaw_id")
+                    finding_id = response.json.get("flaw_id")
 
                     # update finding with asset info
                     if len(finding['assets']) > 0:
                         log.info(f'Updating finding <{finding["title"]}> with asset information')
 
-                        pt_finding = api.finding.get(auth.base_url, auth.get_auth_headers(), client_id, report_id, finding_id)
+                        response = api._v1.findings.get_finding(auth.base_url, auth.get_auth_headers(), client_id, report_id, finding_id)
+                        pt_finding = response.json
                         # when creating a finding certain fields are not validated (cwes, cvss3.1 vector, etc.). IF these fields have invalid data that
                         # would prevent an autosave, the finding will be created successfully, but then crash the api when the finding is called the first time
                         # - since the api crashes the best this script can do is inform the user and exit
@@ -1674,7 +1685,8 @@ class Parser():
                             if pt_asset_id == None:
                                 log.warning(f'Asset \'{self.assets[asset_sid]["asset"]}\' was not created successfully. Cannot add to finding. Skipping...')
                             else:
-                                pt_asset = api.asset.get(auth.base_url, auth.get_auth_headers(), client_id, pt_asset_id)
+                                response = api._v1.assets.get_asset(auth.base_url, auth.get_auth_headers(), client_id, pt_asset_id)
+                                pt_asset  = response.json
                                 pt_finding = self.add_asset_to_finding(pt_finding, pt_asset, finding_sid, asset_sid)
                                 num_assets_to_update += 1
 
@@ -1684,8 +1696,8 @@ class Parser():
                         if num_assets_to_update != len(finding['assets']):
                             log.warning(f'Some assets cannot be adding. Adding {num_assets_to_update}/{len(finding["assets"])}')
 
-                        response = api.finding.update(auth.base_url, auth.get_auth_headers(), pt_finding, client_id, report_id, finding_id)
-                        if response.get("message") != "success":
+                        response = api._v1.findings.update_finding(auth.base_url, auth.get_auth_headers(), client_id, report_id, finding_id, pt_finding)
+                        if response.json.get("message") != "success":
                             log.warning(f'Could not update finding. Skipping...')
                             continue
                         log.success(f'Successfully added asset(s) info to finding!')
@@ -1789,7 +1801,7 @@ class Parser():
 
                 
                 # save report as ptrac
-                file_name = f'{utils.sanitize_name_for_file(client["name"])}_{utils.sanitize_name_for_file(report["name"])}_{self.parser_time}.ptrac'
+                file_name = f'{utils.sanitize_file_name(client["name"])}_{utils.sanitize_file_name(report["name"])}_{self.parser_time}.ptrac'
                 file_path = f'{folder_path}/{file_name}'
                 with open(f'{file_path}', 'w') as file:
                     json.dump(ptrac, file)

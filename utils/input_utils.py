@@ -1,9 +1,7 @@
 import os
 import json
 import csv
-
-import utils.log_handler as logger
-log = logger.log
+from typing import List
 
 prompt_prefix = "\n[Prompt] "
 prompt_suffix = ": "
@@ -13,8 +11,19 @@ def prompt_user(msg):
     return input(prompt_prefix + msg + prompt_suffix)
 
 
-# prompts users for an input. checks the entered input against valid options. returns a valid choice
-def prompt_user_options(msg, retry_msg="", options=[]):
+def user_options(msg: str, retry_msg: str ="", options: List[str] = []) -> str:
+    """
+    Prompts a user for an input from a given list of options, and returns the valid choice.
+
+    :param msg: message to display with the prompt
+    :type msg: str
+    :param retry_msg: message to display if user enters invalid input, defaults to ""
+    :type retry_msg: str, optional
+    :param options: list of valid options, defaults to []
+    :type options: List[str], optional
+    :return: the valid option chosen by the user
+    :rtype: str
+    """    
     #setup
     str_options = ""
     for i in options:
@@ -29,84 +38,154 @@ def prompt_user_options(msg, retry_msg="", options=[]):
         return entered
 
     #ask again
-    if prompt_retry(retry_msg):
-        return prompt_user_options(msg, retry_msg, options)
+    if retry(retry_msg):
+        return user_options(msg, retry_msg, options)
 
 
-# prompts users for an input. checks the entered input is in a valid range. returns a valid choice
-def prompt_user_list(msg, retry_msg="", range=0):
+def user_list(msg: str, retry_msg: str = "", range: int = 0) -> int:
+    """
+    Prompts a user for an input from a given range, and returns the valid choice. Call this method after printing
+    a list of options. This list should display incrementing numbers with each item, from 1 to number
+    of options.
+
+    ex.
+    1 - first option
+    2 - second option
+    etc.
+
+    The number return is the 1-based index. If looping through a list you will need to subtract one
+    to reference the correct choice.
+
+    :param msg: message to display with the prompt
+    :type msg: str
+    :param retry_msg: message to display if user enters invalid input, defaults to ""
+    :type retry_msg: str, optional
+    :param range: number of valid options, defaults to 0
+    :type range: int, optional
+    :return: the valid option chosen by the user
+    :rtype: int
+    """    
     #setup
-    str_options = "0-" + str(range-1)
+    str_options = "1-" + str(range)
     
     #get input
     entered = input(prompt_prefix + msg + " (" + str_options + ")" + prompt_suffix)
     
     #validate input
-    if int(entered) >= 0 and int(entered) < range:
+    if int(entered) > 0 and int(entered) <= range:
         return int(entered)
 
     #ask again
-    if prompt_retry(retry_msg):
-        return prompt_user_list(msg, retry_msg, range)
+    if retry(retry_msg):
+        return user_list(msg, retry_msg, range)
 
 
-# prompts user if they want to ignore the last, potentially problematic, input option
-def prompt_continue_anyways(msg):
+def continue_anyways(msg: str) -> bool:
+    """
+    Prompts a user whether they want to continue despite a potentially problematic input,
+    by adding the string " Continue Anyways? (y/n)" to the end of the `msg` passed in.
+
+    :param msg: message to display with the prompt
+    :type msg: str
+    :return: True if user types "y" else False
+    :rtype: bool
+    """    
     entered = input(prompt_prefix + msg + " Continue Anyways? (y/n)" + prompt_suffix)
     if entered == 'y':
         return True
-    elif entered == 'n':
-        return False
     else:
-        return prompt_continue_anyways(msg)
+        return False
 
         
-# prompts the users if they want to retry the last input option
-def prompt_retry(msg):
+def retry(msg: str) -> bool:
+    """
+    Prompts a user if they want to retry the last input option. This will either return a True boolean
+    or exit the script.
+
+    :param msg: message to display with the prompt
+    :type msg: str
+    :return: True if user wants to retry otherwise the the script will exit
+    :rtype: bool
+    """    
     entered = input(prompt_prefix + msg + " Try Again? (y/n)" + prompt_suffix)
     if entered == 'y':
         return True
-    elif entered == 'n':
-        exit()
     else:
-        return prompt_retry(msg)
+        exit()
 
 
+class LoadedJSONData():
+    def __init__(self, file_path: str, data: dict):
+        self.file_path = file_path
+        self.data = data
 
+def load_json_data(msg: str, json_file_path: str = "") -> LoadedJSONData:
+    """
+    Returns a LoadedJSONData with the loaded JSON data. If unsuccessful loading file, continues prompting user until successful or exits the script.
 
-# gets the file path of a json to be imported, checks if the file exists, and trys to load and return the data
-def handle_load_json_data(msg, json_file_path=""):
+    LoadedJSONData : {
+        "file_path": csv_file_path,
+        "data": data loaded from JSON file
+    }
+
+    :param msg: custom message to tell the user which file they should enter the file path of
+    :type msg: str
+    :param json_file_path: file path to JSON file to load, defaults to ""
+    :type json_file_path: str, optional
+    :return: object with loaded JSON data and the file path the data was loaded from
+    :rtype: LoadedJSONData
+    """    
     if json_file_path == "":
-        json_file_path = prompt_user(prompt_prefix + msg + "(relative file path, including file extention)" + prompt_suffix)
+        json_file_path = prompt_user(msg + "(relative file path, including file extention)")
 
     if not os.path.exists(json_file_path):
-        if prompt_retry(f'Specified JSON file at \'{json_file_path}\' does not exist.'):
-            return handle_load_json_data(msg)
+        if retry(f'Specified JSON file at \'{json_file_path}\' does not exist.'):
+            return load_json_data(msg)
     
     try:
         with open(json_file_path, 'r', encoding="utf8") as file:
-            json_data = {
-                "file_path": json_file_path,
-                "data": json.load(file)
-            }
+            json_data = json.load(file)
     except Exception as e:
-        if prompt_retry(f'Error loading file: {e}'):
-            return handle_load_json_data(msg)
+        if retry(f'Error loading file: {e}'):
+            return load_json_data(msg)
     
-    return json_data
+    return LoadedJSONData(file_path=json_file_path, data=json_data)
 
 
-# gets the file path of a csv to be imported, checks if the file exists, and trys to load and return the data
-def handle_load_csv_data(msg, csv_file_path=""):
+class LoadedCSVData():
+    def __init__(self, file_path: str, csv: List[List[str]], headers: List[str], data: List[str] | List[List[str]]):
+        self.file_path = file_path
+        self.csv = csv
+        self.headers = headers
+        self.data = data
+
+def load_csv_data(msg: str, csv_file_path: str = "") -> LoadedCSVData:
+    """
+    Returns a LoadedCSVData with the loaded CSV data. If unsuccessful loading file, continues prompting user until successful or exits the script.
+
+    LoadedCSVData : {
+        "file_path": csv_file_path,
+        "csv": List[row List[val]] list of rows, each row being a list of column values. Including header row
+        "headers": List[val] of csv header values
+        "data": List[row List[val]] list of rows, each row being a list of column values. Excluding header row
+    }
+
+    :param msg: custom message to tell the user which file they should enter the file path of
+    :type msg: str
+    :param csv_file_path: file path to CSV file to load, defaults to ""
+    :type csv_file_path: str, optional
+    :return: object with loaded CSV data and the file path the data was loaded from
+    :rtype: LoadedCSVData
+    """    
     if csv_file_path == "":
         csv_file_path = prompt_user(msg + " (relative file path, including file extention)")
 
     if not os.path.exists(csv_file_path):
-        if prompt_retry(f'Specified CSV file at \'{csv_file_path}\' does not exist.'):
-            return handle_load_csv_data(msg)
+        if retry(f'Specified CSV file at \'{csv_file_path}\' does not exist.'):
+            return load_csv_data(msg)
 
     try:
-        with open(csv_file_path, 'r', newline='', encoding='utf-8') as f:
+        with open(csv_file_path, 'r', newline='', encoding='utf-8') as f:  # if running into errors with reading a loaded csv, check the encoding
             reader = csv.reader(f)
 
             csv_complete = []
@@ -117,13 +196,8 @@ def handle_load_csv_data(msg, csv_file_path=""):
             csv_headers = csv_complete[0]
             csv_data = csv_complete[1:]
 
-            return {
-                "file_path": csv_file_path,
-                "csv": csv_complete,
-                "headers": csv_headers,
-                "data": csv_data
-            }
+            return LoadedCSVData(file_path=csv_file_path, csv=csv_complete, headers=csv_headers, data=csv_data)
 
     except Exception as e:
-        if prompt_retry(f'Error loading file: {e}'):
-            return handle_load_csv_data(msg)
+        if retry(f'Error loading file: {e}'):
+            return load_csv_data(msg)
